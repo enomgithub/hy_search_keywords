@@ -76,14 +76,14 @@
   :type dicts-: list[dict]
   :rtype: dict
   "
-  (setv d {})
+  (setv merged-dict {})
   (for [dict- dicts-]
        (for [keyword- dict-]
-            (if (in keyword- d)
+            (if (in keyword- merged-dict)
                 (for [result (. dict- [keyword-])]
-                     ((. d [keyword-] append) result))
-                (setv (. d [keyword-]) (. dict- [keyword-])))))
-  d)
+                     ((. merged-dict [keyword-] append) result))
+                (setv (. merged-dict [keyword-]) (. dict- [keyword-])))))
+  merged-dict)
 
 
 (defn get-search-result [path keywords valid-extensions]
