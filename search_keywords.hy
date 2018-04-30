@@ -10,16 +10,24 @@
      (except [ImportError]
              (import json)))
 
-(import [filepathutils [get-node-dict]])
+(import [filepathutils [get-node-dict is-valid-extension]])
 
 
 (setv *logger* ((. logging getLogger) "my-logger"))
 
 
-(defn get-dir-search-result [path keywords]
+(defn get-dir-search-result [path keywords valid-extensions]
+  "
+  :type path: str
+  :type keywords: list[str]
+  :type valid-extensions: list[str]
+  :rtype: dict
+  "
   (setv node (get-node-dict path))
   (setv result-dict-list [])
   (for [file (. node ["file"])]
+       (if-not (is-valid-extension file valid-extensions)
+               (continue))
        (setv result-dict
             ((. get-file-search-result) ((. os path join) path file)
                                         keywords))
@@ -28,13 +36,18 @@
   (for [dir- (. node ["directory"])]
        (setv result-dict
              ((. get-dir-search-result) ((. os path join) path dir-)
-                                        keywords))
+                                        keywords
+                                        valid-extensions))
        (when result-dict
              ((. result-dict-list append) result-dict)))
   (get-merge-dict result-dict-list))
 
 
 (defn get-file-search-result [file-path keywords]
+  "
+  :type file-path: str
+  :type keywords: list[str]
+  :rtype: dict"
   (setv text
         (get-text-from-file file-path))
   (setv result-dict {})
@@ -44,18 +57,25 @@
             (when (in keyword- (. text [line]))
                   ((. lines append) (str (+ line 1)))))
        (when lines
-             ((. *logger* debug) lines)
              (setv (. result-dict [keyword-])
                    [[file-path ((. ", " join) lines)]])))
   result-dict)
 
 
-(defn get-keywords-from-file [file-path]
+(defn get-data-from-file [file-path]
+  "
+  :type file-path: str
+  :rtype: dict or list
+  "
   (with [f (open file-path :mode "r" :encoding "utf-8")]
         ((. json load) f)))
 
 
 (defn get-merge-dict [dicts-]
+  "
+  :type dicts-: list[dict]
+  :rtype: dict
+  "
   (setv d {})
   (for [dict- dicts-]
        (for [keyword- dict-]
@@ -66,7 +86,7 @@
   d)
 
 
-(defn get-search-result [path keywords]
+(defn get-search-result [path keywords valid-extensions]
   "
   :type path: str
   :rtype: dict
@@ -80,6 +100,8 @@
   (setv node (get-node-dict norm-path))
   (setv result-dict-list [])
   (for [file (. node ["file"])]
+       (if-not (is-valid-extension file valid-extensions)
+               (continue))
        (setv result-dict
             ((. get-file-search-result) ((. os path join) norm-path file)
                                         keywords))
@@ -88,7 +110,8 @@
   (for [dir- (. node ["directory"])]
        (setv result-dict
             ((. get-dir-search-result) ((. os path join) norm-path dir-)
-                                       keywords))
+                                       keywords
+                                       valid-extensions))
        (when result-dict
              ((. result-dict-list append) result-dict)))
   (setv merged-dict (get-merge-dict result-dict-list))
@@ -103,6 +126,31 @@
   "
   (with [f (open path :mode "r" :encoding "utf-8")]
         ((. f readlines))))
+
+
+(defn show-result [result-dict]
+  "
+  :type result-dict: dict
+  :rtype: None
+  "
+  (for [keyword- result-dict]
+       (for [(, file-path lines) (. result-dict [keyword-])]
+            (print ((. "[keyword] {0}: [file] {1}, [line] {2}" format)
+                    keyword-
+                    file-path
+                    lines))))
+  None)
+
+
+(defn write-data-to-file [data file]
+  "
+  :type data: dict or list
+  :type file: str
+  :rtype: None
+  "
+  (with [f (open file :mode "w" :encoding "utf-8")]
+    ((. json dump) data f :ensure-ascii False :indent "  "))
+  None)
 
 
 (defn main []
@@ -121,6 +169,16 @@
                            :help "search directories"
                            :nargs "+"
                            :required True
+                           :type str)
+  ((. parser add-argument) "-e" "--extensions"
+                           :dest "extensions_file"
+                           :help "extensions file"
+                           :required True
+                           :type str)
+  ((. parser add-argument) "-o" "--output"
+                           :default ""
+                           :dest "output_file"
+                           :help "output file"
                            :type str)
   ((. parser add-argument) "--debug"
                            :action "store_true"
@@ -142,31 +200,21 @@
   ((. -handler setFormatter) -formatter)
   ((. *logger* addHandler) -handler)
 
-  ((. *logger* debug) ((. "{0}: {1}" format)
-                       (. args keywords-file)
-                       (type (. args keywords-file))))
-  ((. *logger* debug) ((. "{0}: {1}" format)
-                       (. args directories)
-                       (type (. args directories))))
-  ((. *logger* debug) ((. "{0}: {1}" format)
-                       "テスト"
-                       (type "テスト")))
-  (setv keywords (get-keywords-from-file (. args keywords-file)))
+  (setv valid-extensions (get-data-from-file (. args extensions-file)))
+  (setv keywords (get-data-from-file (. args keywords-file)))
   (setv result-dict-list [])
   (for [dir- (. args directories)]
-       (setv result-dict (get-search-result dir- keywords))
+       (setv result-dict
+             (get-search-result dir- keywords valid-extensions))
        (when result-dict
              ((. result-dict-list append) result-dict)))
   (if result-dict-list
       (do (setv result-dict (get-merge-dict result-dict-list))
-          (for [keyword- result-dict]
-               (for [(, file-path lines) (. result-dict [keyword-])]
-                    (print ((. "[keyword] {0}: [file] {1}, [line] {2}" format)
-                            keyword-
-                            file-path
-                            lines))))
+          (if (= (. args output-file) "")
+              (show-result result-dict)
+              (write-data-to-file result-dict (. args output-file)))
           0)
-          1))
+      1))
 
 
 (when (= --name-- "__main__")

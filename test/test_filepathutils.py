@@ -1,15 +1,17 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import os
 from unittest import TestCase
 
 import hy
-from nose.tools import eq_
+from nose.tools import eq_, ok_
 
 from filepathutils import (
     get_child_dirs_list,
     get_files_list,
-    get_node_dict
+    get_node_dict,
+    is_valid_extension
 )
 
 
@@ -29,3 +31,10 @@ class TestFilePathUtils(TestCase):
             "file": ["test_file_1.txt", "test_file_2.md", "test_file_3.ini"],
             "path": "test_dir"
         })
+
+    def test_is_valid_extension(self):
+        actual = is_valid_extension(
+            os.path.join("test_dir", "test_file_1.txt"),
+            [".txt"]
+        )
+        ok_(actual)

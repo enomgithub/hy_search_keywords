@@ -33,3 +33,10 @@
   (setv (. node ["file"]) (get-files-list path))
   (setv (. node ["path"]) path)
   node)
+
+
+(defn is-valid-extension [file-path valid-extensions]
+  (setv extension (. ((. os path splitext) file-path) [1]))
+  (if (in extension valid-extensions)
+      True
+      False))

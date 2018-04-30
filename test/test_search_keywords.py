@@ -9,7 +9,7 @@ from nose.tools import eq_
 
 from search_keywords import (
     get_file_search_result,
-    get_keywords_from_file,
+    get_data_from_file,
     get_merge_dict,
     get_text_from_file
 )
@@ -19,7 +19,7 @@ class TestSearchKeywords(TestCase):
     def test_get_file_search_result(self):
         file_path = os.path.join("test_dir", "test_file_1.txt")
         keywords_path = os.path.join("src", "keywords.json")
-        keywords = get_keywords_from_file(keywords_path)
+        keywords = get_data_from_file(keywords_path)
         actual = get_file_search_result(file_path, keywords)
         eq_(actual,
             {
