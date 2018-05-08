@@ -5,6 +5,7 @@
 (import logging)
 (import os)
 (import sys)
+(import traceback)
 
 (try (import [simplejson :as json])
      (except [ImportError]
@@ -16,28 +17,30 @@
 (setv *logger* ((. logging getLogger) "my-logger"))
 
 
-(defn get-dir-search-result [path keywords valid-extensions]
+(defn callback-walk-handler [exception]
+  "
+  :type exception: BaseException
+  :rtype: None
+  "
+  ((. traceback print-exc))
+  None)
+
+
+(defn get-dir-search-result [path file-names keywords valid-extensions]
   "
   :type path: str
+  :type filenames: list[str]
   :type keywords: list[str]
   :type valid-extensions: list[str]
   :rtype: dict
   "
-  (setv node (get-node-dict path))
   (setv result-dict-list [])
-  (for [file (. node ["file"])]
-       (if-not (is-valid-extension file valid-extensions)
+  (for [file-name file-names]
+       (if-not (is-valid-extension file-name valid-extensions)
                (continue))
        (setv result-dict
-            ((. get-file-search-result) ((. os path join) path file)
-                                        keywords))
-       (when result-dict
-             ((. result-dict-list append) result-dict)))
-  (for [dir- (. node ["directory"])]
-       (setv result-dict
-             ((. get-dir-search-result) ((. os path join) path dir-)
-                                        keywords
-                                        valid-extensions))
+             ((. get-file-search-result) ((. os path join) path file-name)
+                                         keywords))
        (when result-dict
              ((. result-dict-list append) result-dict)))
   (get-merge-dict result-dict-list))
@@ -47,18 +50,25 @@
   "
   :type file-path: str
   :type keywords: list[str]
-  :rtype: dict"
-  (setv text
-        (get-text-from-file file-path))
+  :rtype: dict[list[list[str, list[int]]]]
+  "
   (setv result-dict {})
-  (for [keyword- keywords]
-       (setv lines [])
-       (for [line (range (len text))]
-            (when (in keyword- (. text [line]))
-                  ((. lines append) (str (+ line 1)))))
-       (when lines
-             (setv (. result-dict [keyword-])
-                   [[file-path ((. ", " join) lines)]])))
+  (try (setv text (get-text-from-file file-path))
+       (for [keyword- keywords]
+            (setv lines [])
+            (for [line (range (len text))]
+                 (when (in keyword- (. text [line]))
+                       ((. lines append) (+ line 1))))
+            (when lines
+                  (setv (. result-dict [keyword-])
+                        [[file-path lines]])))
+       (except [UnboundLocalError]
+               ((. *logger* error)
+                ((. "Cannot decode this file: {0}" format) file-path)))
+       (except [PermissionError]
+               ((. *logger* error)
+                ((. "Cannot open this file (permission denied): {0}" format)
+                 file-path))))
   result-dict)
 
 
@@ -86,46 +96,32 @@
   merged-dict)
 
 
-(defn get-search-result [path keywords valid-extensions]
-  "
-  :type path: str
-  :rtype: dict
-  "
-  (setv norm-path ((. os path normpath) path))
-  (setv current-dir ((. os getcwd)))
-  (if ((. os path isabs) norm-path)
-      ((. os chdir) norm-path)
-      (do (setv norm-path ((. os path join) current-dir norm-path))
-          (. os chdir) norm-path))
-  (setv node (get-node-dict norm-path))
-  (setv result-dict-list [])
-  (for [file (. node ["file"])]
-       (if-not (is-valid-extension file valid-extensions)
-               (continue))
-       (setv result-dict
-            ((. get-file-search-result) ((. os path join) norm-path file)
-                                        keywords))
-       (when result-dict
-             ((. result-dict-list append) result-dict)))
-  (for [dir- (. node ["directory"])]
-       (setv result-dict
-            ((. get-dir-search-result) ((. os path join) norm-path dir-)
-                                       keywords
-                                       valid-extensions))
-       (when result-dict
-             ((. result-dict-list append) result-dict)))
-  (setv merged-dict (get-merge-dict result-dict-list))
-  ((. os chdir) current-dir)
-  merged-dict)
-
-
 (defn get-text-from-file [path]
   "
   :type path: str
   :rtype: list[str]
   "
-  (with [f (open path :mode "r" :encoding "utf-8")]
-        ((. f readlines))))
+  (setv encords
+        ["utf-8"
+         "utf-8-sig"
+         "utf-16-be"
+         "utf-16-le"
+         "cp932"
+         "shift-jis"
+         "euc-jp"
+         "euc-jis-2004"
+         "euc-jisx0213"
+         "iso2022-jp"
+         "ascii"])
+  (for [enc encords]
+       (try (with [f (open path :mode "r" :encoding enc)]
+                  (setv data ((. f readlines)))
+                  (break))
+            (except [UnicodeDecodeError UnicodeError]
+                    (continue))
+            (except [PermissionError]
+                    (raise))))
+  data)
 
 
 (defn show-result [result-dict]
@@ -138,7 +134,7 @@
             (print ((. "[keyword] {0}: [file] {1}, [line] {2}" format)
                     keyword-
                     file-path
-                    lines))))
+                    ((. ", " join) (map str lines))))))
   None)
 
 
@@ -200,14 +196,41 @@
   ((. -handler setFormatter) -formatter)
   ((. *logger* addHandler) -handler)
 
-  (setv valid-extensions (get-data-from-file (. args extensions-file)))
-  (setv keywords (get-data-from-file (. args keywords-file)))
+  ;; Validate arguments.
+  (try (setv valid-extensions (get-data-from-file (. args extensions-file)))
+       (except [IOError]
+               ((. *logger* critical)
+                ((. "Cannot open a valid extensions file: {0}" format)
+                 (. args extensions-file)))
+               (raise)))
+
+  (try (setv keywords (get-data-from-file (. args keywords-file)))
+       (except [IOError]
+               ((. *logger* critical)
+                ((. "Cannot open a keywords file: {0}" format)
+                 (. args keywords-file)))
+               (raise)))
+
+  (for [dir- (. args directories)]
+       (if ((. os path isdir) dir-)
+           (continue)
+           (do ((. logger critical)
+                ((. "Invalid directory: {0}" format) dir-))
+               (raise ValueError))))
+
+  ;; Search keywords from files at each directories.
   (setv result-dict-list [])
   (for [dir- (. args directories)]
-       (setv result-dict
-             (get-search-result dir- keywords valid-extensions))
-       (when result-dict
-             ((. result-dict-list append) result-dict)))
+       (for [(, path dirs filenames)
+            ((. os walk) dir- :onerror callback-walk-handler)]
+            (setv result-dict (get-dir-search-result path
+                                                     filenames
+                                                     keywords
+                                                     valid-extensions))
+            (when result-dict
+                  ((. result-dict-list append) result-dict))))
+
+  ;; Output result data.
   (if result-dict-list
       (do (setv result-dict (get-merge-dict result-dict-list))
           (if (= (. args output-file) "")
