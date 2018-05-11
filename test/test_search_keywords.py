@@ -17,24 +17,6 @@ from search_keywords import (
 
 
 class TestSearchKeywords(TestCase):
-    """
-    def test_get_dir_search_result(self):
-        path = "test_dir"
-        file_names = ["test_file_1.txt", "test_file_2.md", "test_file_3.ini"]
-        keywords_path = os.path.join("src", "keywords.json")
-        keywords = get_data_from_file(keywords_path)
-        valid_extensions_file = os.path.json("src", "extensions.json")
-        valid_extensions = get_data_from_file(valid_extensions_file)
-        actual = get_dir_search_result(path, file_names, keywords, valid_extensions)
-        eq_(actual,
-            {
-                "hoge": [
-                    [],
-                    []
-                ]
-            }
-        )
-    """
     def test_get_file_search_result(self):
         file_path = os.path.join("test_dir", "test_file_1.txt")
         keywords_path = os.path.join("src", "keywords.json")

@@ -2,6 +2,7 @@
 ;; -*- coding: utf-8 -*-
 
 (import argparse)
+(import fnmatch)
 (import logging)
 (import os)
 (import sys)
@@ -11,13 +12,15 @@
      (except [ImportError]
              (import json)))
 
-(import [filepathutils [get-node-dict is-valid-extension]])
-
 
 (setv *logger* ((. logging getLogger) "my-logger"))
 
 
-(defn callback-walk-handler [exception]
+(defclass DirectoryNotFound [Exception]
+  (pass))
+
+
+(defn callback-onerror [exception]
   "
   :type exception: BaseException
   :rtype: None
@@ -36,8 +39,8 @@
   "
   (setv result-dict-list [])
   (for [file-name file-names]
-       (if-not (is-valid-extension file-name valid-extensions)
-               (continue))
+       (when (is-invalid-extension file-name valid-extensions)
+             (continue))
        (setv result-dict
              ((. get-file-search-result) ((. os path join) path file-name)
                                          keywords))
@@ -53,11 +56,11 @@
   :rtype: dict[list[list[str, list[int]]]]
   "
   (setv result-dict {})
-  (try (setv text (get-text-from-file file-path))
+  (try (setv texts (get-text-from-file file-path))
        (for [keyword- keywords]
             (setv lines [])
-            (for [line (range (len text))]
-                 (when (in keyword- (. text [line]))
+            (for [(, line text) (enumerate texts)]
+                 (when ((. fnmatch fnmatch) text (+ "*" keyword- "*"))
                        ((. lines append) (+ line 1))))
             (when lines
                   (setv (. result-dict [keyword-])
@@ -116,12 +119,21 @@
   (for [enc encords]
        (try (with [f (open path :mode "r" :encoding enc)]
                   (setv data ((. f readlines)))
-                  (break))
-            (except [UnicodeDecodeError UnicodeError]
+                  (if-not (= enc "utf-8")
+                          ((. *logger* info)
+                           ((. "[Encoding] {0} [File] {1}" format) enc path))
+                  (break)))
+            (except [UnicodeError]
                     (continue))
             (except [PermissionError]
                     (raise))))
   data)
+
+
+(defn is-invalid-extension [file-name valid-extensions]
+  (if (in True (list (map (. file-name endswith) valid-extensions)))
+      False
+      True))
 
 
 (defn show-result [result-dict]
@@ -197,12 +209,30 @@
   ((. *logger* addHandler) -handler)
 
   ;; Validate arguments.
-  (try (setv valid-extensions (get-data-from-file (. args extensions-file)))
-       (except [IOError]
-               ((. *logger* critical)
-                ((. "Cannot open a valid extensions file: {0}" format)
-                 (. args extensions-file)))
-               (raise)))
+  ((. *logger* debug) "Start arguments validation.")
+  (if-not ((. args keywords-file endswith) ".json")
+          (do ((. *logger* critical)
+               ((. "JSON file is required: {0}" format)
+                (. args keywords-file)))
+              (raise ValueError)))
+
+  (if-not ((. args extensions-file endswith) ".json")
+          (do ((. *logger* critical)
+               ((. "JSON file is required: {0}" format)
+                (. args extension-file)))
+              (raise ValueError)))
+
+  (setv invalid-directories
+        (list-comp dir-
+                   [dir- (. args directories)]
+                   (not ((. os path isdir) dir-))))
+
+  (when invalid-directories
+        (for [dir- invalid-directories]
+             ((. *logger* critical)
+              ((. "Directory not found: {0}" format)
+               dir-)))
+        (raise DirectoryNotFound))
 
   (try (setv keywords (get-data-from-file (. args keywords-file)))
        (except [IOError]
@@ -211,26 +241,30 @@
                  (. args keywords-file)))
                (raise)))
 
-  (for [dir- (. args directories)]
-       (if ((. os path isdir) dir-)
-           (continue)
-           (do ((. logger critical)
-                ((. "Invalid directory: {0}" format) dir-))
-               (raise ValueError))))
+  (try (setv valid-extensions (get-data-from-file (. args extensions-file)))
+       (except [IOError]
+               ((. *logger* critical)
+                ((. "Cannot open a valid extensions file: {0}" format)
+                 (. args extensions-file)))
+               (raise)))
+  ((. *logger* debug) "Done.")
 
   ;; Search keywords from files at each directories.
+  ((. *logger* debug) "Start search keywords from files at each directories.")
   (setv result-dict-list [])
   (for [dir- (. args directories)]
        (for [(, path dirs filenames)
-            ((. os walk) dir- :onerror callback-walk-handler)]
+            ((. os walk) dir- :onerror callback-onerror)]
             (setv result-dict (get-dir-search-result path
                                                      filenames
                                                      keywords
                                                      valid-extensions))
             (when result-dict
                   ((. result-dict-list append) result-dict))))
+  ((. *logger* debug) "Done.")
 
   ;; Output result data.
+  ((. *logger* debug) "Start output result data.")
   (if result-dict-list
       (do (setv result-dict (get-merge-dict result-dict-list))
           (if (= (. args output-file) "")
