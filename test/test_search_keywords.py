@@ -8,20 +8,20 @@ import hy
 from nose.tools import eq_
 
 from search_keywords import (
-    get_dir_search_result,
-    get_file_search_result,
-    get_data_from_file,
+    find_keywords_from_dir,
+    find_keywords_from_file,
     get_merge_dict,
-    get_text_from_file
+    read_config,
+    read_texts
 )
 
 
 class TestSearchKeywords(TestCase):
-    def test_get_file_search_result(self):
+    def test_find_keywords_from_file(self):
         file_path = os.path.join("test_dir", "test_file_1.txt")
         keywords_path = os.path.join("src", "keywords.json")
-        keywords = get_data_from_file(keywords_path)
-        actual = get_file_search_result(file_path, keywords)
+        keywords = read_config(keywords_path)
+        actual = find_keywords_from_file(file_path, keywords)
         eq_(actual,
             {
                 "hoge": [[file_path, [1]]],
@@ -73,6 +73,6 @@ class TestSearchKeywords(TestCase):
             }
         )
 
-    def test_get_text_from_file(self):
-        actual = get_text_from_file(os.path.join("test_dir", "test_file_1.txt"))
+    def test_read_texts(self):
+        actual = read_texts(os.path.join("test_dir", "test_file_1.txt"))
         eq_(actual, ["hoge\n", "fuga\n", "piyo\n"])

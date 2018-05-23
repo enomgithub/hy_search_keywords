@@ -22,41 +22,41 @@
 
 (defn callback-onerror [exception]
   "
-  :type exception: BaseException
+  :type exception: Exception
   :rtype: None
   "
   ((. traceback print-exc))
   None)
 
 
-(defn get-dir-search-result [path file-names keywords valid-extensions]
+(defn find-keywords-from-dir [path file-names keywords valid-extensions]
   "
   :type path: str
   :type filenames: list[str]
   :type keywords: list[str]
   :type valid-extensions: list[str]
-  :rtype: dict
+  :rtype: dict[str, list[list[str, list[int]]]]
   "
   (setv result-dict-list [])
   (for [file-name file-names]
        (when (is-invalid-extension file-name valid-extensions)
              (continue))
        (setv result-dict
-             ((. get-file-search-result) ((. os path join) path file-name)
+             ((. find-keywords-from-file) ((. os path join) path file-name)
                                          keywords))
        (when result-dict
              ((. result-dict-list append) result-dict)))
   (get-merge-dict result-dict-list))
 
 
-(defn get-file-search-result [file-path keywords]
+(defn find-keywords-from-file [file-path keywords]
   "
   :type file-path: str
   :type keywords: list[str]
-  :rtype: dict[list[list[str, list[int]]]]
+  :rtype: dict[str, list[list[str, list[int]]]]
   "
   (setv result-dict {})
-  (try (setv texts (get-text-from-file file-path))
+  (try (setv texts (read-texts file-path))
        (for [keyword- keywords]
             (setv lines [])
             (for [(, line text) (enumerate texts)]
@@ -75,15 +75,6 @@
   result-dict)
 
 
-(defn get-data-from-file [file-path]
-  "
-  :type file-path: str
-  :rtype: dict or list
-  "
-  (with [f (open file-path :mode "r" :encoding "utf-8")]
-        ((. json load) f)))
-
-
 (defn get-merge-dict [dicts-]
   "
   :type dicts-: list[dict]
@@ -99,14 +90,29 @@
   merged-dict)
 
 
-(defn get-text-from-file [path]
+(defn is-invalid-extension [file-name valid-extensions]
+  (if (in True (list (map (. file-name endswith) valid-extensions)))
+      False
+      True))
+
+
+(defn read-config [file-path]
+  "
+  :type file-path: str
+  :rtype: dict or list
+  "
+  (with [f (open file-path :mode "r" :encoding "utf-8")]
+        ((. json load) f)))
+
+
+(defn read-texts [path]
   "
   :type path: str
   :rtype: list[str]
   "
   (setv encords
-        ["utf-8"
-         "utf-8-sig"
+        ["utf-8-sig"
+         "utf-8"
          "utf-16-be"
          "utf-16-le"
          "cp932"
@@ -119,10 +125,8 @@
   (for [enc encords]
        (try (with [f (open path :mode "r" :encoding enc)]
                   (setv data ((. f readlines)))
-                  (if-not (= enc "utf-8")
-                          ((. *logger* info)
-                           ((. "[Encoding] {0} [File] {1}" format) enc path))
-                  (break)))
+                  ((. *logger* info)
+                   ((. "[Encoding] {0} [File] {1}" format) enc path)))
             (except [UnicodeError]
                     (continue))
             (except [PermissionError]
@@ -130,15 +134,9 @@
   data)
 
 
-(defn is-invalid-extension [file-name valid-extensions]
-  (if (in True (list (map (. file-name endswith) valid-extensions)))
-      False
-      True))
-
-
 (defn show-result [result-dict]
   "
-  :type result-dict: dict
+  :type result-dict: dict[str, list[list[str, list[int]]]]
   :rtype: None
   "
   (for [keyword- result-dict]
@@ -157,7 +155,7 @@
   :rtype: None
   "
   (with [f (open file :mode "w" :encoding "utf-8")]
-    ((. json dump) data f :ensure-ascii False :indent "  "))
+        ((. json dump) data f :ensure-ascii False :indent 2))
   None)
 
 
@@ -234,14 +232,14 @@
                dir-)))
         (raise DirectoryNotFound))
 
-  (try (setv keywords (get-data-from-file (. args keywords-file)))
+  (try (setv keywords (read-config (. args keywords-file)))
        (except [IOError]
                ((. *logger* critical)
                 ((. "Cannot open a keywords file: {0}" format)
                  (. args keywords-file)))
                (raise)))
 
-  (try (setv valid-extensions (get-data-from-file (. args extensions-file)))
+  (try (setv valid-extensions (read-config (. args extensions-file)))
        (except [IOError]
                ((. *logger* critical)
                 ((. "Cannot open a valid extensions file: {0}" format)
@@ -254,8 +252,8 @@
   (setv result-dict-list [])
   (for [dir- (. args directories)]
        (for [(, path dirs filenames)
-            ((. os walk) dir- :onerror callback-onerror)]
-            (setv result-dict (get-dir-search-result path
+             ((. os walk) dir- :onerror callback-onerror)]
+            (setv result-dict (find-keywords-from-dir path
                                                      filenames
                                                      keywords
                                                      valid-extensions))
