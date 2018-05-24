@@ -2,15 +2,12 @@
 ;; -*- coding: utf-8 -*-
 
 (import argparse)
-(import fnmatch)
+(import json)
 (import logging)
 (import os)
+(import re)
 (import sys)
 (import traceback)
-
-(try (import [simplejson :as json])
-     (except [ImportError]
-             (import json)))
 
 
 (setv *logger* ((. logging getLogger) "my-logger"))
@@ -35,7 +32,7 @@
   :type filenames: list[str]
   :type keywords: list[str]
   :type valid-extensions: list[str]
-  :rtype: dict[str, list[list[str, list[int]]]]
+  :rtype: dict[str, list[list[str, list[list[int, list[int]]]]]]
   "
   (setv result-dict-list [])
   (for [file-name file-names]
@@ -53,15 +50,12 @@
   "
   :type file-path: str
   :type keywords: list[str]
-  :rtype: dict[str, list[list[str, list[int]]]]
+  :rtype: dict[str, list[list[str, list[HyList[HyInteger, HyList[HyInteger]]]]]]
   "
   (setv result-dict {})
   (try (setv texts (read-texts file-path))
        (for [keyword- keywords]
-            (setv lines [])
-            (for [(, line text) (enumerate texts)]
-                 (when ((. fnmatch fnmatch) text (+ "*" keyword- "*"))
-                       ((. lines append) (+ line 1))))
+            (setv lines (find-keyword-from-texts texts keyword-))
             (when lines
                   (setv (. result-dict [keyword-])
                         [[file-path lines]])))
@@ -73,6 +67,34 @@
                 ((. "Cannot open this file (permission denied): {0}" format)
                  file-path))))
   result-dict)
+
+
+(defn find-keyword-from-text [text keyword-]
+  "
+  :type text: str
+  :type keyword-: str
+  :rtype: list[int]
+  "
+  (setv found ((. re finditer) keyword-
+                               text
+                               (| (. re UNICODE)
+                                  (. re IGNORECASE))))
+  (list (map (fn [f] ((. f start))) found)))
+
+
+(defn find-keyword-from-texts [texts keyword-]
+  "
+  :type texts: list[str]
+  :type keyword-: str
+  :type row: int
+  :rtype: list[list[int, list[int]]]
+  "
+  (setv found [])
+  (for [(, index text) (enumerate texts)]
+       (setv columns (find-keyword-from-text text keyword-))
+       (if columns
+           ((. found append) [index columns])))
+  found)
 
 
 (defn get-merge-dict [dicts-]
@@ -101,7 +123,8 @@
   :type file-path: str
   :rtype: dict or list
   "
-  (with [f (open file-path :mode "r" :encoding "utf-8")]
+  (with [f (open file-path :mode "r" :encoding "utf-8-sig")]
+
         ((. json load) f)))
 
 
@@ -112,7 +135,6 @@
   "
   (setv encords
         ["utf-8-sig"
-         "utf-8"
          "utf-16-be"
          "utf-16-le"
          "cp932"
@@ -127,6 +149,7 @@
                   (setv data ((. f readlines)))
                   ((. *logger* info)
                    ((. "[Encoding] {0} [File] {1}" format) enc path)))
+            (break)
             (except [UnicodeError]
                     (continue))
             (except [PermissionError]
@@ -136,15 +159,19 @@
 
 (defn show-result [result-dict]
   "
-  :type result-dict: dict[str, list[list[str, list[int]]]]
+  :type result-dict: dict[str, list[list[str, list[list[int, list[int]]]]]]
+
   :rtype: None
   "
   (for [keyword- result-dict]
-       (for [(, file-path lines) (. result-dict [keyword-])]
-            (print ((. "[keyword] {0}: [file] {1}, [line] {2}" format)
+       (for [(, file-path positions) (. result-dict [keyword-])]
+            (for [(, row columns) positions]
+                 (print ((. "[keyword] {0}: [file] {1}, [line] {2}: {3}" format)
                     keyword-
                     file-path
-                    ((. ", " join) (map str lines))))))
+                    (inc row)
+                    ((. ", " join) (map (fn [column] (str (inc column)))
+                                        columns)))))))
   None)
 
 
@@ -166,20 +193,20 @@
   "
   (setv parser ((. argparse ArgumentParser) :description "search keywords"))
   ((. parser add-argument) "-k" "--keywords"
+                           :default "keywords.json"
                            :dest "keywords_file"
                            :help "keywords file path"
-                           :required True
                            :type str)
   ((. parser add-argument) "-d" "--directories"
+                           :default "."
                            :dest "directories"
                            :help "search directories"
                            :nargs "+"
-                           :required True
                            :type str)
   ((. parser add-argument) "-e" "--extensions"
+                           :default "extensions.json"
                            :dest "extensions_file"
                            :help "extensions file"
-                           :required True
                            :type str)
   ((. parser add-argument) "-o" "--output"
                            :default ""
