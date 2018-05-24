@@ -5,30 +5,20 @@ import os
 from unittest import TestCase
 
 import hy
-from nose.tools import eq_
+from nose.tools import eq_, ok_
 
 from search_keywords import (
-    get_dir_search_result,
-    get_file_search_result,
-    get_data_from_file,
+    find_keywords_from_dir,
+    find_keywords_from_file,
+    find_keyword_from_text,
+    find_keyword_from_texts,
     get_merge_dict,
-    get_text_from_file
+    read_config,
+    read_texts
 )
 
 
 class TestSearchKeywords(TestCase):
-    def test_get_file_search_result(self):
-        file_path = os.path.join("test_dir", "test_file_1.txt")
-        keywords_path = os.path.join("src", "keywords.json")
-        keywords = get_data_from_file(keywords_path)
-        actual = get_file_search_result(file_path, keywords)
-        eq_(actual,
-            {
-                "hoge": [[file_path, [1]]],
-                "fuga": [[file_path, [2]]],
-                "piyo": [[file_path, [3]]]
-            })
-
     def test_get_merge_dict(self):
         actual = get_merge_dict([
             {
@@ -73,6 +63,40 @@ class TestSearchKeywords(TestCase):
             }
         )
 
-    def test_get_text_from_file(self):
-        actual = get_text_from_file(os.path.join("test_dir", "test_file_1.txt"))
+    def test_find_keyword_from_text(self):
+        text = "hogefugapiyohogefugapiyohoge"
+        keyword = "hoge"
+        actual = find_keyword_from_text(text, keyword)
+        eq_(actual, [0, 12, 24])
+        ok_(isinstance(actual, list))
+
+    def test_find_keyword_from_texts(self):
+        texts = [
+            "hogefugapiyohogefugapiyohoge",
+            "fugahogefugapiyohogefugapiyo",
+            "",
+            "fugapiyo",
+            "piyohogefuga"
+        ]
+        keyword = "hoge"
+        actual = find_keyword_from_texts(texts, keyword)
+        eq_(actual,
+            [[0, [0, 12, 24]],
+             [1, [4, 16]],
+             [4, [4]]])
+
+    def test_find_keywords_from_file(self):
+        file_path = os.path.join("test_dir", "test_file_1.txt")
+        keywords_path = os.path.join("src", "keywords.json")
+        keywords = read_config(keywords_path)
+        actual = find_keywords_from_file(file_path, keywords)
+        eq_(actual,
+            {
+                "hoge": [[file_path, [[0, [0]]]]],
+                "fuga": [[file_path, [[1, [0]]]]],
+                "piyo": [[file_path, [[2, [0]]]]]
+            })
+
+    def test_read_texts(self):
+        actual = read_texts(os.path.join("test_dir", "test_file_1.txt"))
         eq_(actual, ["hoge\n", "fuga\n", "piyo\n"])
