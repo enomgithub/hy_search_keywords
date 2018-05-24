@@ -124,6 +124,7 @@
   :rtype: dict or list
   "
   (with [f (open file-path :mode "r" :encoding "utf-8-sig")]
+
         ((. json load) f)))
 
 
@@ -159,6 +160,7 @@
 (defn show-result [result-dict]
   "
   :type result-dict: dict[str, list[list[str, list[list[int, list[int]]]]]]
+
   :rtype: None
   "
   (for [keyword- result-dict]
