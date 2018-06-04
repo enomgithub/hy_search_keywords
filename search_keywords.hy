@@ -9,6 +9,7 @@
 (import sys)
 (import traceback)
 
+(import tqdm)
 
 (setv *logger* ((. logging getLogger) "my-logger"))
 
@@ -26,78 +27,108 @@
   None)
 
 
-(defn find-keywords-from-dir [path file-names keywords valid-extensions]
+(defn bin-to-uni-texts [binary enc]
+  "
+  :type binary: bin
+  :type enc: str
+  :rtype: list[str] or None
+  "
+  (try (setv texts
+             (-> ((. binary decode) enc) (.replace "\r" "") (.split "\n")))
+       ((. *logger* info) ((. "Encoding {0}" format) enc))
+       texts
+       (except [UnicodeError]
+               None)
+       (except [PermissionError]
+               (raise))))
+
+
+(defn find-from-dir [path file-names keywords &key {"insensitive" False}]
   "
   :type path: str
   :type filenames: list[str]
   :type keywords: list[str]
-  :type valid-extensions: list[str]
+  :type insensitive: bool
   :rtype: dict[str, list[list[str, list[list[int, list[int]]]]]]
   "
-  (setv result-dict-list [])
-  (for [file-name file-names]
-       (when (is-invalid-extension file-name valid-extensions)
-             (continue))
-       (setv result-dict
-             ((. find-keywords-from-file) ((. os path join) path file-name)
-                                         keywords))
-       (when result-dict
-             ((. result-dict-list append) result-dict)))
-  (get-merge-dict result-dict-list))
+  (get-merged-dict (list (remove empty?
+                                 (map (fn [file-name]
+                                        ((. find-from-file)
+                                         ((. os path join) path file-name)
+                                         keywords
+                                         insensitive))
+                                      file-names)))))
 
 
-(defn find-keywords-from-file [file-path keywords]
+(defn find-from-file [file-path keywords &key {"insensitive" False}]
   "
   :type file-path: str
   :type keywords: list[str]
-  :rtype: dict[str, list[list[str, list[HyList[HyInteger, HyList[HyInteger]]]]]]
+  :type insensitive: bool
+  :rtype: dict[str, list[list[str, list[list[int, list[int]]]]]]
   "
-  (setv result-dict {})
   (try (setv texts (read-texts file-path))
-       (for [keyword- keywords]
-            (setv lines (find-keyword-from-texts texts keyword-))
-            (when lines
-                  (setv (. result-dict [keyword-])
-                        [[file-path lines]])))
-       (except [UnboundLocalError]
-               ((. *logger* error)
-                ((. "Cannot decode this file: {0}" format) file-path)))
+       (if (is texts None)
+           (do ((. *logger* error)
+                ((. "Cannot decode this file: {0}" format) file-path))
+               {})
+           (get-merged-dict
+            (list (remove empty?
+                          (map (fn [keyword-]
+                                 (do (setv lines
+                                           (find-from-texts texts
+                                                            keyword-
+                                                            insensitive))
+                                     (if lines
+                                         {keyword- [[file-path lines]]}
+                                         {})))
+                               keywords)))))
        (except [PermissionError]
                ((. *logger* error)
                 ((. "Cannot open this file (permission denied): {0}" format)
-                 file-path))))
-  result-dict)
+                 file-path))
+               (return {}))
+       (except [OSError]
+               ((. *logger* error) ((. "Invalid file: {0}" format) file-path))
+               (return {}))))
 
 
-(defn find-keyword-from-text [text keyword-]
+(defn find-from-text [text keyword- &key {"insensitive" False}]
   "
   :type text: str
   :type keyword-: str
+  :type insensitive: bool
   :rtype: list[int]
   "
-  (setv found ((. re finditer) keyword-
-                               text
-                               (| (. re UNICODE)
-                                  (. re IGNORECASE))))
-  (list (map (fn [f] ((. f start))) found)))
+  (list (map (fn [f] ((. f start)))
+             ((. re finditer) keyword-
+                              text
+                              (if insensitive
+                                  (| (. re UNICODE)
+                                     (. re IGNORECASE))
+                                  (. re UNICODE))))))
 
 
-(defn find-keyword-from-texts [texts keyword-]
+(defn find-from-texts [texts keyword- &key {"insensitive" False}]
   "
   :type texts: list[str]
   :type keyword-: str
-  :type row: int
+  :type insensitive: bool
   :rtype: list[list[int, list[int]]]
   "
-  (setv found [])
-  (for [(, index text) (enumerate texts)]
-       (setv columns (find-keyword-from-text text keyword-))
-       (if columns
-           ((. found append) [index columns])))
-  found)
+  (list (remove empty?
+                (map (fn [(, index text)]
+                       (do (setv columns
+                                 (find-from-text text
+                                                 keyword-
+                                                 insensitive))
+                           (if columns
+                               [index columns]
+                               [])))
+                     (enumerate texts)))))
 
 
-(defn get-merge-dict [dicts-]
+(defn get-merged-dict [dicts-]
   "
   :type dicts-: list[dict]
   :rtype: dict
@@ -112,19 +143,12 @@
   merged-dict)
 
 
-(defn is-invalid-extension [file-name valid-extensions]
-  (if (in True (list (map (. file-name endswith) valid-extensions)))
-      False
-      True))
-
-
 (defn read-config [file-path]
   "
   :type file-path: str
   :rtype: dict or list
   "
   (with [f (open file-path :mode "r" :encoding "utf-8-sig")]
-
         ((. json load) f)))
 
 
@@ -133,56 +157,48 @@
   :type path: str
   :rtype: list[str]
   "
-  (setv encords
+  (setv encodes
         ["utf-8-sig"
-         "utf-16-be"
-         "utf-16-le"
-         "cp932"
-         "shift-jis"
          "euc-jp"
-         "euc-jis-2004"
-         "euc-jisx0213"
-         "iso2022-jp"
-         "ascii"])
-  (for [enc encords]
-       (try (with [f (open path :mode "r" :encoding enc)]
-                  (setv data ((. f readlines)))
-                  ((. *logger* info)
-                   ((. "[Encoding] {0} [File] {1}" format) enc path)))
-            (break)
-            (except [UnicodeError]
-                    (continue))
-            (except [PermissionError]
-                    (raise))))
-  data)
+         "cp932"
+         "utf-16"
+         "utf-16-le"])
+  (with [f (open path :mode "rb")]
+        (setv bin-data ((. f read))))
+  (or #* (map (fn [enc]
+                (bin-to-uni-texts bin-data enc))
+              encodes)))
 
 
-(defn show-result [result-dict]
+(defn show [result]
   "
-  :type result-dict: dict[str, list[list[str, list[list[int, list[int]]]]]]
-
+  :type result: dict[str, list[list[str, list[list[int, list[int]]]]]]
   :rtype: None
   "
-  (for [keyword- result-dict]
-       (for [(, file-path positions) (. result-dict [keyword-])]
+  (for [keyword- result]
+       (for [(, file-path positions) (. result [keyword-])]
             (for [(, row columns) positions]
-                 (print ((. "[keyword] {0}: [file] {1}, [line] {2}: {3}" format)
-                    keyword-
-                    file-path
-                    (inc row)
-                    ((. ", " join) (map (fn [column] (str (inc column)))
-                                        columns)))))))
+                 (print ((. "{0}:{1} ({2}: {3})" format)
+                         file-path
+                         (inc row)
+                         ((. ", " join) (map (fn [column]
+                                               (str (inc column)))
+                                             columns))
+                         keyword-)))))
   None)
 
 
-(defn write-data-to-file [data file]
+(defn write-to-file [data file]
   "
   :type data: dict or list
   :type file: str
   :rtype: None
   "
   (with [f (open file :mode "w" :encoding "utf-8")]
-        ((. json dump) data f :ensure-ascii False :indent 2))
+        ((. json dump) data
+                       f
+                       :ensure-ascii False
+                       :indent 2))
   None)
 
 
@@ -193,7 +209,7 @@
   "
   (setv parser ((. argparse ArgumentParser) :description "search keywords"))
   ((. parser add-argument) "-k" "--keywords"
-                           :default "keywords.json"
+                           :default ((. os path join) "src" "keywords.json")
                            :dest "keywords_file"
                            :help "keywords file path"
                            :type str)
@@ -203,16 +219,14 @@
                            :help "search directories"
                            :nargs "+"
                            :type str)
-  ((. parser add-argument) "-e" "--extensions"
-                           :default "extensions.json"
-                           :dest "extensions_file"
-                           :help "extensions file"
-                           :type str)
   ((. parser add-argument) "-o" "--output"
                            :default ""
                            :dest "output_file"
                            :help "output file"
                            :type str)
+  ((. parser add-argument) "--insensitive"
+                           :action "store_true"
+                           :help "case insensitve")
   ((. parser add-argument) "--debug"
                            :action "store_true"
                            :help "debug mode")
@@ -241,12 +255,6 @@
                 (. args keywords-file)))
               (raise ValueError)))
 
-  (if-not ((. args extensions-file endswith) ".json")
-          (do ((. *logger* critical)
-               ((. "JSON file is required: {0}" format)
-                (. args extension-file)))
-              (raise ValueError)))
-
   (setv invalid-directories
         (list-comp dir-
                    [dir- (. args directories)]
@@ -265,36 +273,29 @@
                 ((. "Cannot open a keywords file: {0}" format)
                  (. args keywords-file)))
                (raise)))
-
-  (try (setv valid-extensions (read-config (. args extensions-file)))
-       (except [IOError]
-               ((. *logger* critical)
-                ((. "Cannot open a valid extensions file: {0}" format)
-                 (. args extensions-file)))
-               (raise)))
   ((. *logger* debug) "Done.")
 
   ;; Search keywords from files at each directories.
   ((. *logger* debug) "Start search keywords from files at each directories.")
-  (setv result-dict-list [])
-  (for [dir- (. args directories)]
+  (setv results [])
+  (for [dir- ((. tqdm tqdm) (. args directories) :ascii True)]
        (for [(, path dirs filenames)
              ((. os walk) dir- :onerror callback-onerror)]
-            (setv result-dict (find-keywords-from-dir path
-                                                     filenames
-                                                     keywords
-                                                     valid-extensions))
-            (when result-dict
-                  ((. result-dict-list append) result-dict))))
+            (setv result (find-from-dir path
+                                        filenames
+                                        keywords
+                                        (. args insensitive)))
+            (when result
+                  ((. results append) result))))
   ((. *logger* debug) "Done.")
 
   ;; Output result data.
   ((. *logger* debug) "Start output result data.")
-  (if result-dict-list
-      (do (setv result-dict (get-merge-dict result-dict-list))
+  (if results
+      (do (setv result (get-merged-dict results))
           (if (= (. args output-file) "")
-              (show-result result-dict)
-              (write-data-to-file result-dict (. args output-file)))
+              (show result)
+              (write-to-file result (. args output-file)))
           0)
       1))
 

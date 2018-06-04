@@ -4,9 +4,6 @@ SETLOCAL
 ECHO Activate venv...
 CALL %USERPROFILE%\venv_hy\Scripts\activate.bat
 
-SET THISDIR=%~dp0
-SET PYTHONPATH=%THISDIR%\modules;%PYTHONPATH%
-
 hy search_keywords.hy %*
 SET STATE=%ERRORLEVEL%
 
@@ -20,4 +17,3 @@ IF NOT %STATE%==0 (
     ECHO ê≥èÌèIóπÇµÇ‹ÇµÇΩÅB
     EXIT /b 0
 )
-
