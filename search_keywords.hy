@@ -8,8 +8,10 @@
 (import re)
 (import sys)
 (import traceback)
+(import unicodedata)
 
 (import tqdm)
+
 
 (setv *logger* ((. logging getLogger) "my-logger"))
 
@@ -100,12 +102,18 @@
   :rtype: list[int]
   "
   (list (map (fn [f] ((. f start)))
-             ((. re finditer) keyword-
-                              text
-                              (if insensitive
+             (if insensitive
+                 ((. re finditer) keyword-
+                                  text
+                                  (. re UNICODE))
+                 ((. re finditer) ((. unicodedata normalize)
+                                   "NFKC"
+                                   ((. keyword- replace) "～" "〜"))
+                                  ((. unicodedata normalize)
+                                   "NFKC"
+                                   ((.  text replace) "～" "〜"))
                                   (| (. re UNICODE)
-                                     (. re IGNORECASE))
-                                  (. re UNICODE))))))
+                                     (. re IGNORECASE)))))))
 
 
 (defn find-from-texts [texts keyword- &key {"insensitive" False}]
