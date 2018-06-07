@@ -103,9 +103,6 @@
   "
   (list (map (fn [found] ((. found start)))
              (if insensitive
-                 ((. re finditer) keyword-
-                                  text
-                                  (. re UNICODE))
                  ((. re finditer) ((. unicodedata normalize)
                                    "NFKC"
                                    ((. keyword- replace) "～" "〜"))
@@ -113,7 +110,10 @@
                                    "NFKC"
                                    ((.  text replace) "～" "〜"))
                                   (| (. re UNICODE)
-                                     (. re IGNORECASE)))))))
+                                     (. re IGNORECASE)))
+                 ((. re finditer) keyword-
+                                  text
+                                  (. re UNICODE))))))
 
 
 (defn find-from-texts [texts keyword- &key {"insensitive" False}]
