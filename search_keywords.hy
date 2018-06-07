@@ -27,14 +27,13 @@
   None)
 
 
-(defn bin-to-uni-texts [binary enc]
+(defn bin-to-str [binary enc]
   "
   :type binary: bin
   :type enc: str
   :rtype: list[str] or None
   "
-  (try (setv texts
-             (-> ((. binary decode) enc) (.replace "\r" "") (.split "\n")))
+  (try (setv texts ((. binary decode) enc))
        ((. *logger* info) ((. "Encoding {0}" format) enc))
        texts
        (except [UnicodeError]
@@ -166,7 +165,9 @@
   (with [f (open path :mode "rb")]
         (setv bin-data ((. f read))))
   (or #* (map (fn [enc]
-                (bin-to-uni-texts bin-data enc))
+                (try (-> (bin-to-str bin-data enc) (split-lines))
+                     (except [AttributeError]
+                             None)))
               encodes)))
 
 
@@ -186,6 +187,14 @@
                                              columns))
                          keyword-)))))
   None)
+
+
+(defn split-lines [text]
+  "
+  :type text: str
+  :rtype: list[str]
+  "
+  (-> text (.replace "\r" "") (.split "\n")))
 
 
 (defn write-to-file [data file]
