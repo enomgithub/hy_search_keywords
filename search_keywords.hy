@@ -203,17 +203,16 @@
   :type file: str
   :rtype: None
   "
-  (with [f (open file :mode "w" :encoding "utf-8")]
+  (with [fp (open file :mode "w" :encoding "utf-8")]
         ((. json dump) data
-                       f
+                       fp
                        :ensure-ascii False
                        :indent 2))
   None)
 
 
 (defn main []
-  "main
-
+  "
   :rtype: int
   "
   (setv parser ((. argparse ArgumentParser) :description "search keywords"))
