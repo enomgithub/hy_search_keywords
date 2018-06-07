@@ -140,14 +140,9 @@
   :type dicts-: list[dict]
   :rtype: dict
   "
-  (setv merged-dict {})
-  (for [dict- dicts-]
-       (for [keyword- dict-]
-            (if (in keyword- merged-dict)
-                (for [result (. dict- [keyword-])]
-                     ((. merged-dict [keyword-] append) result))
-                (setv (. merged-dict [keyword-]) (. dict- [keyword-])))))
-  merged-dict)
+  (cond [(= dicts- []) {}]
+        [(= (len dicts-) 1) (. dicts- [0])]
+        [True (merge-with (fn [x y] (+ x y)) #* dicts-)]))
 
 
 (defn read-config [file-path]
