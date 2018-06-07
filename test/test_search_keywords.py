@@ -23,7 +23,7 @@ from search_keywords import (
 class TestSearchKeywords(TestCase):
     def test_bin_to_str(self):
         binary = bytes.fromhex("81600D0A8160")
-        actual = bin_to_str(binary, u"cp932")
+        actual = bin_to_str(binary, "cp932")
         eq_(actual, "～\r\n～")
 
     def test_find_from_text(self):
