@@ -101,7 +101,7 @@
   :type insensitive: bool
   :rtype: list[int]
   "
-  (list (map (fn [f] ((. f start)))
+  (list (map (fn [found] ((. found start)))
              (if insensitive
                  ((. re finditer) keyword-
                                   text
@@ -155,8 +155,8 @@
   :type file-path: str
   :rtype: dict or list
   "
-  (with [f (open file-path :mode "r" :encoding "utf-8-sig")]
-        ((. json load) f)))
+  (with [fp (open file-path :mode "r" :encoding "utf-8-sig")]
+        ((. json load) fp)))
 
 
 (defn read-texts [path]
@@ -170,8 +170,8 @@
          "cp932"
          "utf-16"
          "utf-16-le"])
-  (with [f (open path :mode "rb")]
-        (setv bin-data ((. f read))))
+  (with [fp (open path :mode "rb")]
+        (setv bin-data ((. fp read))))
   (or #* (map (fn [enc]
                 (try (-> (bin-to-str bin-data enc) (split-lines))
                      (except [AttributeError]
