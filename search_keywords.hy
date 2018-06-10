@@ -150,8 +150,7 @@
   :type file-path: str
   :rtype: dict or list
   "
-  (with [fp (open file-path :mode "r" :encoding "utf-8-sig")]
-        ((. json load) fp)))
+        )
 
 
 (defn read-texts [path]
@@ -222,7 +221,8 @@
                            :default ((. os path join) "src" "keywords.json")
                            :dest "keywords_file"
                            :help "keywords file path"
-                           :type str)
+                           :type ((. argparse FileType) :mode "r"
+                                                        :encoding "utf-8-sig"))
   ((. parser add-argument) "-d" "--directories"
                            :default "."
                            :dest "directories"
@@ -234,7 +234,7 @@
                            :dest "output_file"
                            :help "output file"
                            :type ((. argparse FileType) :mode "w"
-                                                        :encoding "utf-8"))
+                                                        :encoding "utf-8-sig"))
   ((. parser add-argument) "--insensitive"
                            :action "store_true"
                            :help "case insensitve")
@@ -260,12 +260,6 @@
 
   ;; Validate arguments.
   ((. *logger* debug) "Start arguments validation.")
-  (if-not ((. args keywords-file endswith) ".json")
-          (do ((. *logger* critical)
-               ((. "JSON file is required: {0}" format)
-                (. args keywords-file)))
-              (raise ValueError)))
-
   (setv invalid-directories
         (list-comp dir-
                    [dir- (. args directories)]
@@ -278,7 +272,7 @@
                dir-)))
         (raise DirectoryNotFound))
 
-  (try (setv keywords (read-config (. args keywords-file)))
+  (try (setv keywords ((. json load) (. args keywords-file)))
        (except [IOError]
                ((. *logger* critical)
                 ((. "Cannot open a keywords file: {0}" format)
