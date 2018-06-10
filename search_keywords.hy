@@ -200,17 +200,16 @@
   (-> text (.replace "\r" "") (.split "\n")))
 
 
-(defn write-to-file [data file]
+(defn write-to-file [data fp]
   "
   :type data: dict or list
-  :type file: str
+  :type file: File
   :rtype: None
   "
-  (with [fp (open file :mode "w" :encoding "utf-8")]
-        ((. json dump) data
-                       fp
-                       :ensure-ascii False
-                       :indent 2))
+  ((. json dump) data
+                 fp
+                 :ensure-ascii False
+                     :indent 2)
   None)
 
 
@@ -231,10 +230,11 @@
                            :nargs "+"
                            :type str)
   ((. parser add-argument) "-o" "--output"
-                           :default ""
+                           :default None
                            :dest "output_file"
                            :help "output file"
-                           :type str)
+                           :type ((. argparse FileType) :mode "w"
+                                                        :encoding "utf-8"))
   ((. parser add-argument) "--insensitive"
                            :action "store_true"
                            :help "case insensitve")
@@ -304,7 +304,7 @@
   ((. *logger* debug) "Start output result data.")
   (if results
       (do (setv result (get-merged-dict results))
-          (if (= (. args output-file) "")
+          (if (is (. args output-file) None)
               (show result)
               (write-to-file result (. args output-file)))
           0)
