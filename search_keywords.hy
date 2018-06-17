@@ -10,6 +10,7 @@
 (import traceback)
 (import unicodedata)
 
+(import [jinja2 [Environment FileSystemLoader]])
 (import tqdm)
 
 
@@ -18,15 +19,6 @@
 
 (defclass DirectoryNotFound [Exception]
   (pass))
-
-
-(defn callback-onerror [exception]
-  "
-  :type exception: Exception
-  :rtype: None
-  "
-  ((. traceback print-exc))
-  None)
 
 
 (defn bin-to-str [binary enc]
@@ -42,6 +34,41 @@
                None)
        (except [PermissionError]
                (raise))))
+
+
+(defn callback-onerror [exception]
+  "
+  :type exception: Exception
+  :rtype: None
+  "
+  ((. traceback print-exc))
+  None)
+
+
+(defn dump-html [args data]
+  "
+  :type args: Namespace
+  :type data: dict or list
+  "
+  (setv environment
+        (Environment :loader (FileSystemLoader "." :encoding "utf-8")))
+  (setv template ((. environment get-template) (. args template)))
+  (setv html ((. template render) {"result" data}))
+  ((. (. args output-file) write) html)
+  None)
+
+
+(defn dump-json [args data]
+  "
+  :type args: Namespace
+  :type data: dict or list
+  :rtype: None
+  "
+  ((. json dump) data
+                 (. args output-file)
+                 :ensure-ascii False
+                 :indent 2)
+  None)
 
 
 (defn find-from-dir [path file-names keywords &key {"insensitive" False}]
@@ -173,8 +200,9 @@
               encodes)))
 
 
-(defn show [result]
+(defn show [args result]
   "
+  :typte args: Namespace
   :type result: dict[str, list[list[str, list[list[int, list[int]]]]]]
   :rtype: None
   "
@@ -199,19 +227,6 @@
   (-> text (.replace "\r" "") (.split "\n")))
 
 
-(defn write-to-file [data fp]
-  "
-  :type data: dict or list
-  :type file: File
-  :rtype: None
-  "
-  ((. json dump) data
-                 fp
-                 :ensure-ascii False
-                     :indent 2)
-  None)
-
-
 (defn main []
   "
   :rtype: int
@@ -222,25 +237,48 @@
                            :dest "keywords_file"
                            :help "keywords file path"
                            :type ((. argparse FileType) :mode "r"
-                                                        :encoding "utf-8-sig"))
+                                                        :encoding "utf-8"))
   ((. parser add-argument) "-d" "--directories"
                            :default "."
                            :dest "directories"
                            :help "search directories"
                            :nargs "+"
                            :type str)
-  ((. parser add-argument) "-o" "--output"
-                           :default None
-                           :dest "output_file"
-                           :help "output file"
-                           :type ((. argparse FileType) :mode "w"
-                                                        :encoding "utf-8-sig"))
   ((. parser add-argument) "--insensitive"
                            :action "store_true"
                            :help "case insensitve")
   ((. parser add-argument) "--debug"
                            :action "store_true"
                            :help "debug mode")
+  (setv subparsers ((. parser add-subparsers) :help "subcommand -h"))
+  (setv parser-stdout
+        ((. subparsers add-parser) "stdout"
+                                   :help "stdout"))
+  ((. parser-stdout set-defaults) :func show)
+  (setv parser-json
+        ((. subparsers add-parser) "json"
+                                   :help "output json"))
+  ((. parser-json add-argument) "-o" "--output"
+                                :default "detection.json"
+                                :dest "output_file"
+                                :help "output file"
+                                :type ((. argparse FileType) :mode "w"
+                                                             :encoding "utf-8"))
+  ((. parser-json set-defaults) :func dump-json)
+  (setv parser-html
+        ((. subparsers add-parser) "html"
+                                   :help "output html"))
+  ((. parser-html add-argument) "-o" "--output"
+                                :default "detection.html"
+                                :dest "output_file"
+                                :help "output file"
+                                :type ((. argparse FileType) :mode "w"
+                                                             :encoding "utf-8"))
+  ((. parser-html add-argument) "--template"
+                                :default "detection.tpl.html"
+                                :dest "template"
+                                :help "HTML template file")
+  ((. parser-html set-defaults) :func dump-html)
   (setv args ((. parser parse-args)))
 
   (if (. args debug)
@@ -298,9 +336,7 @@
   ((. *logger* debug) "Start output result data.")
   (if results
       (do (setv result (get-merged-dict results))
-          (if (is (. args output-file) None)
-              (show result)
-              (write-to-file result (. args output-file)))
+          ((. args func) args result)
           0)
       1))
 

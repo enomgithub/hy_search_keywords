@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+  <head></head>
+  <body>
+    <ol type="1">
+{% for keyword_ in result -%}
+  {% for file_path, positions in result[keyword_] -%}
+    {% for row, columns in positions %}
+      <li>
+        <a href="{{ file_path }}">{{ file_path }}</a>: {{ row + 1 }} {% for column in columns %}{{ column + 1 }}, {% endfor %}: {{ keyword_ }}
+      </li>
+    {%- endfor %}
+  {%- endfor %}
+{%- endfor %}
+    </ol>
+  </body>
+</html>
