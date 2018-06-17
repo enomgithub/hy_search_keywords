@@ -54,7 +54,7 @@
         (Environment :loader (FileSystemLoader "." :encoding "utf-8")))
   (setv template ((. environment get-template) (. args template)))
   (setv html ((. template render) {"result" data}))
-  ((. (. args output-file) write) html)
+  ((. args output-file write) html)
   None)
 
 
