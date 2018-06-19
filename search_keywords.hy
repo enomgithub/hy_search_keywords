@@ -2,6 +2,7 @@
 ;; -*- coding: utf-8 -*-
 
 (import argparse)
+(import fnmatch)
 (import json)
 (import logging)
 (import os)
@@ -14,7 +15,7 @@
 (import tqdm)
 
 
-(setv *logger* ((. logging getLogger) "my-logger"))
+(setv *logger* ((. logging getLogger) "search-keywords"))
 
 
 (defclass DirectoryNotFound [Exception]
@@ -72,54 +73,78 @@
   None)
 
 
-(defn find-from-dir [path file-names keywords &key {"insensitive" False}]
+(defn find-from-dir [path file-names keywords ignores
+                     &key {"insensitive" False}]
   "
   :type path: str
   :type filenames: list[str]
   :type keywords: list[str]
+  :type ignores: list[str]
   :type insensitive: bool
   :rtype: dict[str, list[list[str, list[list[int, list[int]]]]]]
   "
-  (get-merged-dict (list (remove empty?
-                                 (map (fn [file-name]
-                                        ((. find-from-file)
-                                         ((. os path join) path file-name)
-                                         keywords
-                                         insensitive))
-                                      file-names)))))
+  (setv path-list ((. path split) (. os path sep)))
+  (if (or #* (list (map (fn [dir-]
+                          (or #* (list (map (fn [ignore]
+                                              ((. fnmatch fnmatch) dir-
+                                                                   ignore))
+                                            ignores))))
+                        path-list)))
+      (do ((. *logger* debug) ((. "Skip this directory: {0}" format) path))
+          {})
+      (get-merged-dict (list (remove empty?
+                                     (map (fn [file-name]
+                                            ((. find-from-file)
+                                             path
+                                             file-name
+                                             keywords
+                                             ignores
+                                             insensitive))
+                                          file-names))))))
 
 
-(defn find-from-file [file-path keywords &key {"insensitive" False}]
+(defn find-from-file [path file-name keywords ignores
+                      &key {"insensitive" False}]
   "
-  :type file-path: str
+  :type path: str
+  :type file-name: str
   :type keywords: list[str]
+  :type ignores: list[str]
   :type insensitive: bool
   :rtype: dict[str, list[list[str, list[list[int, list[int]]]]]]
   "
-  (try (setv texts (read-texts file-path))
-       (if (is texts None)
-           (do ((. *logger* error)
-                ((. "Cannot decode this file: {0}" format) file-path))
-               {})
-           (get-merged-dict
-            (list (remove empty?
-                          (map (fn [keyword-]
-                                 (do (setv lines
-                                           (find-from-texts texts
-                                                            keyword-
-                                                            insensitive))
-                                     (if lines
-                                         {keyword- [[file-path lines]]}
-                                         {})))
-                               keywords)))))
-       (except [PermissionError]
-               ((. *logger* error)
-                ((. "Cannot open this file (permission denied): {0}" format)
-                 file-path))
-               (return {}))
-       (except [OSError]
-               ((. *logger* error) ((. "Invalid file: {0}" format) file-path))
-               (return {}))))
+  (if (or #* (list (map (fn [ignore]
+                          ((. fnmatch fnmatch) file-name ignore))
+                        ignores)))
+      (do ((. *logger* debug)
+           ((. "Skip this file: {0}" format) ((. os path join) path file-name)))
+          {})
+      (try (setv file-path ((. os path join) path file-name))
+           (setv texts (read-texts file-path))
+           (if (is texts None)
+               (do ((. *logger* error)
+                    ((. "Cannot decode this file: {0}" format) file-path))
+                   {})
+               (get-merged-dict
+                 (list (remove empty?
+                               (map (fn [keyword-]
+                                      (do (setv lines
+                                                (find-from-texts texts
+                                                                 keyword-
+                                                                 insensitive))
+                                          (if lines
+                                              {keyword- [[file-path lines]]}
+                                              {})))
+                                    keywords)))))
+           (except [PermissionError]
+                   ((. *logger* error)
+                    ((. "Cannot open this file (permission denied): {0}" format)
+                     file-path))
+                   (return {}))
+           (except [OSError]
+                   ((. *logger* error) ((. "Invalid file: {0}" format)
+                    file-path))
+                   (return {})))))
 
 
 (defn find-from-text [text keyword- &key {"insensitive" False}]
@@ -237,6 +262,12 @@
                            :help "search directories"
                            :nargs "+"
                            :type str)
+  ((. parser add-argument) "-i" "--ignores"
+                           :default ((. os path join) "src" "ignores.json")
+                           :dest "ignores_file"
+                           :help "ignores file path"
+                           :type ((. argparse FileType) :mode "r"
+                                                        :encoding "utf-8"))
   ((. parser add-argument) "--insensitive"
                            :action "store_true"
                            :help "case insensitve")
@@ -306,8 +337,14 @@
   (try (setv keywords ((. json load) (. args keywords-file)))
        (except [OSError]
                ((. *logger* critical)
-                ((. "Cannot open a keywords file: {0}" format)
+                ((. "Cannot open the keywords file: {0}" format)
                  (. args keywords-file)))
+               (raise)))
+  (try (setv ignores ((. json load) (. args ignores-file)))
+       (except [OSError]
+               ((. *logger* critical)
+                ((. "Cannot open the ignores file: {0}" format)
+                 (. args ignores-file)))
                (raise)))
   ((. *logger* debug) "Done.")
 
@@ -320,6 +357,7 @@
             (setv result (find-from-dir path
                                         filenames
                                         keywords
+                                        ignores
                                         (. args insensitive)))
             (when result
                   ((. results append) result))))
@@ -328,10 +366,12 @@
   ;; Output result data.
   ((. *logger* debug) "Start output result data.")
   (if results
-      (do (setv result (get-merged-dict results))
+      (do ((. *logger* info) "Detected.")
+          (setv result (get-merged-dict results))
           ((. args func) args result)
           0)
-      1))
+      (do ((. *logger* info) "Did not detect.")
+          1)))
 
 
 (when (= --name-- "__main__")
