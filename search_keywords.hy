@@ -172,14 +172,6 @@
         [True (merge-with (fn [x y] (+ x y)) #* dicts-)]))
 
 
-(defn read-config [file-path]
-  "
-  :type file-path: str
-  :rtype: dict or list
-  "
-        )
-
-
 (defn read-texts [path]
   "
   :type path: str
@@ -311,7 +303,7 @@
         (raise DirectoryNotFound))
 
   (try (setv keywords ((. json load) (. args keywords-file)))
-       (except [IOError]
+       (except [OSError]
                ((. *logger* critical)
                 ((. "Cannot open a keywords file: {0}" format)
                  (. args keywords-file)))
