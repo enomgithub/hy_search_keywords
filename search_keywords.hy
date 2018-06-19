@@ -49,6 +49,7 @@
   "
   :type args: Namespace
   :type data: dict or list
+  :rtype: None
   "
   (setv environment
         (Environment :loader (FileSystemLoader "." :encoding "utf-8")))
