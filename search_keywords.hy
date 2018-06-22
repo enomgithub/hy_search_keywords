@@ -11,7 +11,7 @@
 (import traceback)
 (import unicodedata)
 
-(import [jinja2 [Environment FileSystemLoader]])
+(import [jinja2 [Environment]])
 (import tqdm)
 
 
@@ -52,9 +52,10 @@
   :type data: dict or list
   :rtype: None
   "
-  (setv environment
-        (Environment :loader (FileSystemLoader "." :encoding "utf-8")))
-  (setv template ((. environment get-template) (. args template)))
+  (setv environment (Environment))
+  (with [fp (open (. args template) "r" :encoding "utf-8")]
+        (setv template-text ((. fp read))))
+  (setv template ((. environment from-string) template-text))
   (setv html ((. template render) {"result" data}))
   ((. args output-file write) html)
   None)
