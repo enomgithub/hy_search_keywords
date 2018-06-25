@@ -15,8 +15,8 @@
 (setv *logger* ((. logging getLogger) "search-keywords.module.search"))
 
 
-(defn find-from-dir [path file-names keywords ignores
-                     &key {"insensitive" False}]
+(defn find-from-dir [path file-names keywords
+                     &key {"ignores" [] "insensitive" False}]
   "
   :type path: str
   :type filenames: list[str]
