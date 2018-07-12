@@ -3,6 +3,7 @@
 
 (import json)
 (import logging)
+(import subprocess)
 
 (import [jinja2 [Environment]])
 
@@ -24,7 +25,12 @@
         (setv template-text ((. fp read))))
   (setv template ((. environment from-string) template-text))
   (setv html ((. template render) {"result" data}))
-  ((. args output-file write) html)
+  (with [fp (open (. args output-file) "w" :encoding "utf-8")]
+        ((. fp write) html))
+  (with [fp (open (. args browser) "r" :encoding "utf-8")]
+        (setv browser-path ((. json load) fp)))
+  ((. subprocess Popen)
+   [browser-path (. args output-file)])
   None)
 
 
@@ -34,10 +40,11 @@
   :type data: dict or list
   :rtype: None
   "
-  ((. json dump) data
-                 (. args output-file)
-                 :ensure-ascii False
-                 :indent 2)
+  (with [fp (open (. args output-file) "w" :encoding "utf-8")]
+        ((. json dump) data
+                       fp
+                       :ensure-ascii False
+                       :indent 2))
   None)
 
 

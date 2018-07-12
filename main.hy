@@ -78,8 +78,7 @@
                                 :default "detection.json"
                                 :dest "output_file"
                                 :help "output file"
-                                :type ((. argparse FileType) :mode "w"
-                                                             :encoding "utf-8"))
+                                :type str)
   ((. parser-json set-defaults) :func dump-json)
   (setv parser-html
         ((. subparsers add-parser) "html"
@@ -88,12 +87,17 @@
                                 :default "detection.html"
                                 :dest "output_file"
                                 :help "output file"
-                                :type ((. argparse FileType) :mode "w"
-                                                             :encoding "utf-8"))
+                                :type str)
   ((. parser-html add-argument) "--template"
                                 :default "detection.tpl.html"
                                 :dest "template"
                                 :help "HTML template file")
+  ((. parser-html add-argument) "--browser"
+                                :default ((. os path join) "src"
+                                                           "browser.json")
+                                :dest "browser"
+                                :help "browser file path"
+                                :type str)
   ((. parser-html set-defaults) :func dump-html)
   (setv args ((. parser parse-args)))
 
