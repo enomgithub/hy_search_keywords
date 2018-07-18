@@ -9,7 +9,6 @@
 
 (import [Qt.QtCore [Qt]])
 (import [Qt.QtWidgets [QApplication
-                       QCheckBox
                        QComboBox
                        QDialog
                        QFileDialog
