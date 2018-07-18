@@ -13,6 +13,7 @@
                            split-lines]])
 (import [module.io [dump-html
                     dump-json
+                    read-json
                     read-texts
                     show]])
 (import [module.search [find-from-dir
@@ -42,24 +43,17 @@
   :rtype: int
   "
   (setv parser ((. argparse ArgumentParser) :description "search keywords"))
-  ((. parser add-argument) "-k" "--keywords"
-                           :default ((. os path join) "src" "keywords.json")
-                           :dest "keywords_file"
-                           :help "keywords file path"
-                           :type ((. argparse FileType) :mode "r"
-                                                        :encoding "utf-8"))
+  ((. parser add-argument) "-c" "--config"
+                           :default ((. os path join) "config" "config.json")
+                           :dest "config_file"
+                           :help "config file path"
+                           :type str)
   ((. parser add-argument) "-d" "--directories"
                            :default "."
                            :dest "directories"
                            :help "search directories"
                            :nargs "+"
                            :type str)
-  ((. parser add-argument) "-i" "--ignores"
-                           :default ((. os path join) "src" "ignores.json")
-                           :dest "ignores_file"
-                           :help "ignores file path"
-                           :type ((. argparse FileType) :mode "r"
-                                                        :encoding "utf-8"))
   ((. parser add-argument) "--insensitive"
                            :action "store_true"
                            :help "case insensitve")
@@ -69,35 +63,15 @@
   (setv subparsers ((. parser add-subparsers) :help "subcommand -h"))
   (setv parser-stdout
         ((. subparsers add-parser) "stdout"
-                                   :help "stdout"))
+                                   :help "show detection result to stdout"))
   ((. parser-stdout set-defaults) :func show)
   (setv parser-json
         ((. subparsers add-parser) "json"
-                                   :help "output json"))
-  ((. parser-json add-argument) "-o" "--output"
-                                :default "detection.json"
-                                :dest "output_file"
-                                :help "output file"
-                                :type str)
+                                   :help "dump detection result to json"))
   ((. parser-json set-defaults) :func dump-json)
   (setv parser-html
         ((. subparsers add-parser) "html"
-                                   :help "output html"))
-  ((. parser-html add-argument) "-o" "--output"
-                                :default "detection.html"
-                                :dest "output_file"
-                                :help "output file"
-                                :type str)
-  ((. parser-html add-argument) "--template"
-                                :default "detection.tpl.html"
-                                :dest "template"
-                                :help "HTML template file")
-  ((. parser-html add-argument) "--browser"
-                                :default ((. os path join) "src"
-                                                           "browser.json")
-                                :dest "browser"
-                                :help "browser file path"
-                                :type str)
+                                   :help "dump detection result to html"))
   ((. parser-html set-defaults) :func dump-html)
   (setv args ((. parser parse-args)))
 
@@ -130,18 +104,14 @@
                dir-)))
         (raise DirectoryNotFound))
 
-  (try (setv keywords ((. json load) (. args keywords-file)))
+  (try (setv config (read-json (. args config-file)))
        (except [OSError]
                ((. *logger* critical)
                 ((. "Cannot open the keywords file: {0}" format)
-                 (. args keywords-file)))
+                 (. args config-file)))
                (raise)))
-  (try (setv ignores ((. json load) (. args ignores-file)))
-       (except [OSError]
-               ((. *logger* critical)
-                ((. "Cannot open the ignores file: {0}" format)
-                 (. args ignores-file)))
-               (raise)))
+  (setv keywords ((. config get) "keywords" []))
+  (setv ignores ((. config get) "ignores" []))
   ((. *logger* debug) "Done.")
 
   ;; Search keywords from files for each directories.

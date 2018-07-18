@@ -8,7 +8,7 @@
 (import [jinja2 [Environment]])
 
 (import [module.datautils [bin-to-str
-                    split-lines]])
+                           split-lines]])
 
 
 (setv *logger* ((. logging getLogger) "search-keywords.module.io"))
@@ -21,16 +21,20 @@
   :rtype: None
   "
   (setv environment (Environment))
-  (with [fp (open (. args template) "r" :encoding "utf-8")]
-        (setv template-text ((. fp read))))
+  (setv config (read-json (. args config-file)))
+  (setv template-text
+        (with [fp (open (. config ["html"] ["template"])
+                        :mode "r"
+                        :encoding "utf-8")]
+              ((. fp read))))
   (setv template ((. environment from-string) template-text))
   (setv html ((. template render) {"result" data}))
-  (with [fp (open (. args output-file) "w" :encoding "utf-8")]
+  (with [fp (open (. config ["html"] ["output"])
+                  :mode "w"
+                  :encoding "utf-8")]
         ((. fp write) html))
-  (with [fp (open (. args browser) "r" :encoding "utf-8")]
-        (setv browser-path ((. json load) fp)))
-  ((. subprocess Popen)
-   [browser-path (. args output-file)])
+  (setv browser-path (. config ["html"] ["browser"]))
+  ((. subprocess Popen) [browser-path (. config ["html"] ["output"])])
   None)
 
 
@@ -40,12 +44,24 @@
   :type data: dict or list
   :rtype: None
   "
-  (with [fp (open (. args output-file) "w" :encoding "utf-8")]
+  (setv config (read-json (. args config-file)))
+  (with [fp (open (. config ["json"] ["output"])
+                  :mode "w"
+                  :encoding "utf-8")]
         ((. json dump) data
                        fp
                        :ensure-ascii False
                        :indent 2))
   None)
+
+
+(defn read-json [path]
+  "
+  :type path: str
+  :rtype: list or dict or str or int or None
+  "
+  (with [fp (open path :mode "r" :encoding "utf-8")]
+        ((. json load) fp)))
 
 
 (defn read-texts [path]
