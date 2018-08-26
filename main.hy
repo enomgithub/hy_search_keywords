@@ -25,8 +25,7 @@
 (setv *logger* ((. logging getLogger) "search-keywords.main"))
 
 
-(defclass DirectoryNotFound [Exception]
-  (pass))
+(defclass DirectoryNotFound [Exception])
 
 
 (defn callback-onerror [exception]
@@ -60,19 +59,10 @@
   ((. parser add-argument) "--debug"
                            :action "store_true"
                            :help "debug mode")
-  (setv subparsers ((. parser add-subparsers) :help "subcommand -h"))
-  (setv parser-stdout
-        ((. subparsers add-parser) "stdout"
-                                   :help "show detection result to stdout"))
-  ((. parser-stdout set-defaults) :func show)
-  (setv parser-json
-        ((. subparsers add-parser) "json"
-                                   :help "dump detection result to json"))
-  ((. parser-json set-defaults) :func dump-json)
-  (setv parser-html
-        ((. subparsers add-parser) "html"
-                                   :help "dump detection result to html"))
-  ((. parser-html set-defaults) :func dump-html)
+  ((. parser add-argument) "--output"
+                           :choices ["stdout" "json" "html"]
+                           :default "stdout"
+                           :help "output style")
   (setv args ((. parser parse-args)))
 
   (if (. args debug)
@@ -93,9 +83,9 @@
   ;; Validate arguments.
   ((. *logger* debug) "Start arguments validation.")
   (setv invalid-directories
-        (list-comp dir-
-                   [dir- (. args directories)]
-                   (not ((. os path isdir) dir-))))
+        (lfor dir- (. args directories)
+              :if (not ((. os path isdir) dir-))
+              dir-))
 
   (when invalid-directories
         (for [dir- invalid-directories]
@@ -134,7 +124,9 @@
   (if results
       (do ((. *logger* info) "Detected.")
           (setv result (get-merged-dict results))
-          ((. args func) args result)
+          (cond [(= (. args output) "stdout") (show result)]
+                [(= (. args output) "json") (dump-json config result)]
+                [(= (. args output) "html") (dump-html config result)])
           0)
       (do ((. *logger* info) "Did not detect.")
           1)))

@@ -16,7 +16,8 @@
 
 
 (defn find-from-dir [path file-names keywords
-                     &key {"ignores" [] "insensitive" False}]
+                     &optional [ignores []]
+                               [insensitive False]]
   "
   :type path: str
   :type filenames: list[str]
@@ -26,11 +27,11 @@
   :rtype: dict[str, list[list[str, list[list[int, list[int]]]]]]
   "
   (setv path-list ((. path split) (. os path sep)))
-  (if (or #* (list (map (fn [dir-]
-                          (or #* (list (map (fn [ignore]
-                                              ((. fnmatch fnmatch) dir-
-                                                                   ignore))
-                                            ignores))))
+  (if (any (list (map (fn [dir-]
+                        (any (list (map (fn [ignore]
+                                          ((. fnmatch fnmatch) dir-
+                                                               ignore))
+                                        ignores))))
                         path-list)))
       (do ((. *logger* debug) ((. "Skip this directory: {0}" format) path))
           {})
@@ -46,7 +47,8 @@
 
 
 (defn find-from-file [path file-name keywords
-                      &key {"ignores" [] "insensitive" False}]
+                      &optional [ignores []]
+                                [insensitive False]]
   "
   :type path: str
   :type file-name: str
@@ -55,9 +57,9 @@
   :type insensitive: bool
   :rtype: dict[str, list[list[str, list[list[int, list[int]]]]]]
   "
-  (if (or #* (list (map (fn [ignore]
-                          ((. fnmatch fnmatch) file-name ignore))
-                        ignores)))
+  (if (any (list (map (fn [ignore]
+                        ((. fnmatch fnmatch) file-name ignore))
+                      ignores)))
       (do ((. *logger* debug)
            ((. "Skip this file: {0}" format) ((. os path join) path file-name)))
           {})
@@ -89,7 +91,7 @@
                    (return {})))))
 
 
-(defn find-from-text [text keyword- &key {"insensitive" False}]
+(defn find-from-text [text keyword- &optional [insensitive False]]
   "
   :type text: str
   :type keyword-: str
@@ -111,7 +113,7 @@
                                   (. re UNICODE))))))
 
 
-(defn find-from-texts [texts keyword- &key {"insensitive" False}]
+(defn find-from-texts [texts keyword- &optional [insensitive False]]
   "
   :type texts: list[str]
   :type keyword-: str
@@ -119,8 +121,10 @@
   :rtype: list[list[int, list[int]]]
   "
   (list (remove empty?
-                (map (fn [(, index text)]
-                       (do (setv columns
+                (map (fn [args]
+                       (do (setv index (. args [0]))
+                           (setv text (. args [1]))
+                           (setv columns
                                  (find-from-text text
                                                  keyword-
                                                  insensitive))

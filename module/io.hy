@@ -14,14 +14,13 @@
 (setv *logger* ((. logging getLogger) "search-keywords.module.io"))
 
 
-(defn dump-html [args data]
+(defn dump-html [config data]
   "
-  :type args: Namespace
+  :type config: dict
   :type data: dict or list
   :rtype: None
   "
   (setv environment (Environment))
-  (setv config (read-json (. args config-file)))
   (setv template-text
         (with [fp (open (. config ["html"] ["template"])
                         :mode "r"
@@ -38,13 +37,12 @@
   None)
 
 
-(defn dump-json [args data]
+(defn dump-json [config data]
   "
-  :type args: Namespace
+  :type config: dict
   :type data: dict or list
   :rtype: None
   "
-  (setv config (read-json (. args config-file)))
   (with [fp (open (. config ["json"] ["output"])
                   :mode "w"
                   :encoding "utf-8")]
@@ -84,9 +82,8 @@
               encodes)))
 
 
-(defn show [args result]
+(defn show [result]
   "
-  :typte args: Namespace
   :type result: dict[str, list[list[str, list[list[int, list[int]]]]]]
   :rtype: None
   "
